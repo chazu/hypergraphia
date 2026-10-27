@@ -677,15 +677,15 @@ action is attributed and visible in `log`.
 - [x] `remember` rejects gitleaks and entropy findings with rule, offset, length and
       ≤ 4 chars; agents get `secret_detected` JSON and exit 4; `--allow` works only
       for entropy findings from a human TTY.
-- [ ] `sync` appends with fast-forward pushes, retries races, and never loses or
+- [x] `sync` appends with fast-forward pushes, retries races, and never loses or
       duplicates entries across ≥ 3 concurrent clones, including `remember` during sync.
-- [ ] Incoming lines are validated and rescanned; invalid or secret-bearing lines are
+- [x] Incoming lines are validated and rescanned; invalid or secret-bearing lines are
       never indexed or injected.
-- [ ] `recall` selects key terms, re-scores with BM25F, abstains when nothing is
+- [x] `recall` selects key terms, re-scores with BM25F, abstains when nothing is
       relevant, and returns budgeted, deduped, provenance-tagged results.
 - [ ] Hooks inject memories in the untrusted-data wrapper, never block on the
       network, never fail the prompt, and report held-back entries.
-- [ ] Human-only commands refuse under agents.
+- [x] Human-only commands refuse under agents.
 - [ ] `deinit` removes hooks/skill; the state dir is removable with no other traces.
 
 ### Functional (v1.1)
