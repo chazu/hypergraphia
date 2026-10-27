@@ -6,6 +6,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/chazu/hypergraphia/internal/entry"
 )
@@ -22,6 +23,13 @@ type Log struct {
 	Entries []*entry.Entry // valid entries
 	Invalid int            // lines that failed validation (dropped)
 	Newer   bool           // lines from a newer format version were seen
+	// Dropped lists memory ids removed by compaction. It is kept forever so
+	// a stale clone can never push them back.
+	Dropped []string
+	// CompactedAt is the day of the last compaction (zero if never).
+	CompactedAt time.Time
+	// Commits is the number of commits (appends) since the last compaction.
+	Commits int
 }
 
 // Transport reads and appends to one remote log.
@@ -33,4 +41,7 @@ type Transport interface {
 	ReadLocal(ctx context.Context) (*Log, error)
 	// Append adds entries on top of base; ErrConflict if the remote moved.
 	Append(ctx context.Context, base string, add []*entry.Entry) (string, error)
+	// Replace overwrites the log with exactly all and dropped (compaction,
+	// purge), leasing on base; ErrConflict if the remote moved.
+	Replace(ctx context.Context, base string, all []*entry.Entry, dropped []string, compactedAt time.Time) (string, error)
 }

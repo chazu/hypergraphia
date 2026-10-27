@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/chazu/hypergraphia/internal/syncer"
 	"github.com/chazu/hypergraphia/internal/tokens"
 	"github.com/chazu/hypergraphia/internal/transport"
+	"github.com/chazu/hypergraphia/internal/visibility"
 )
 
 // MinIDPrefix is the shortest id prefix accepted (the first 10 ULID
@@ -130,7 +132,21 @@ func (a *App) Entries() ([]*entry.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return replay.Merge(live, pending), nil
+	arch, err := a.archiveEntries()
+	if err != nil {
+		return nil, err
+	}
+	return replay.Merge(live, arch, pending), nil
+}
+
+// archiveEntries reads the local archive (everything this clone has seen,
+// including history the shared log has compacted away).
+func (a *App) archiveEntries() ([]*entry.Entry, error) {
+	log, err := notes.NewArchive(a.Git).Read(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return a.withoutQuarantined(log.Entries)
 }
 
 // Transport returns the live-log transport, or nil without a remote.
@@ -156,19 +172,23 @@ func (a *App) liveEntries() ([]*entry.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	return a.withoutQuarantined(log.Entries)
+}
+
+func (a *App) withoutQuarantined(es []*entry.Entry) ([]*entry.Entry, error) {
 	st, err := a.Dir.Load()
 	if err != nil {
 		return nil, err
 	}
 	if len(st.Quarantine) == 0 {
-		return log.Entries, nil
+		return es, nil
 	}
 	q := map[string]bool{}
 	for _, id := range st.Quarantine {
 		q[id] = true
 	}
 	var out []*entry.Entry
-	for _, e := range log.Entries {
+	for _, e := range es {
 		if !q[e.ID.String()] {
 			out = append(out, e)
 		}
@@ -256,12 +276,62 @@ func (a *App) Syncer(ctx context.Context) (*syncer.Syncer, error) {
 			}
 			return known, nil
 		},
-		Replay: a.replayLocked,
+		Replay:     a.replayLocked,
+		Archive:    notes.NewArchive(a.Git),
+		AfterPurge: func(ctx context.Context) error { return notes.ExpireReflogs(ctx, a.Git) },
+		CanPush:    a.canPush,
 	}
 	if t != nil {
 		s.Transport = t
 	}
 	return s, nil
+}
+
+// visibilityTTL is how long a remote's visibility check is trusted.
+const visibilityTTL = 24 * time.Hour
+
+// canPush re-checks, at most daily and whenever the remote URL changes,
+// that the remote has not become public since a human last accepted it.
+func (a *App) canPush(ctx context.Context) error {
+	st, err := a.Dir.Load()
+	if err != nil {
+		return err
+	}
+	url := a.Git.Config(ctx, "remote."+st.Remote+".url")
+	if url == st.RemoteURL && a.Now().Sub(st.CheckedAt) < visibilityTTL {
+		return visibilityError(st, url)
+	}
+	v := CheckVisibility(ctx, url)
+	if url != st.RemoteURL || st.Visibility != "acknowledged" {
+		st.Visibility = v
+	}
+	if url != st.RemoteURL && v != visibility.Private && v != "local" {
+		st.Visibility = v // a new remote needs a new human acknowledgement
+	}
+	st.RemoteURL, st.CheckedAt = url, a.Now()
+	if err := a.Dir.Save(st); err != nil {
+		return err
+	}
+	return visibilityError(st, url)
+}
+
+func visibilityError(st *state.State, url string) error {
+	switch st.Visibility {
+	case visibility.Public, visibility.Unknown:
+		return fmt.Errorf("not pushing: %s is %s (a human can run `hypergraphia init --public-ok` to accept)", url, st.Visibility)
+	}
+	return nil
+}
+
+// CheckVisibility classifies a remote; local paths need no check.
+func CheckVisibility(ctx context.Context, url string) string {
+	switch {
+	case url == "":
+		return "local"
+	case strings.HasPrefix(url, "/"), strings.HasPrefix(url, "file://"), strings.HasPrefix(url, "."):
+		return "local"
+	}
+	return visibility.Check(ctx, nil, "", url)
 }
 
 // SpawnSync starts a detached background sync (unless disabled with

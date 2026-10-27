@@ -233,3 +233,95 @@ func TestTransientFetchErrorIsNotNoRemote(t *testing.T) {
 		t.Fatalf("unreachable remote must be an error, not ErrNoRemote: %v", err)
 	}
 }
+
+func TestReplaceCompactsWithDroppedList(t *testing.T) {
+	ctx := context.Background()
+	url := remote(t)
+	a, dir := clone(t, url)
+	keep := mk(t, time.Now(), "keep")
+	gone := mk(t, time.Now(), "gone")
+	base, err := a.Append(ctx, "", []*entry.Entry{keep, gone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err = a.Append(ctx, base, []*entry.Entry{mk(t, time.Now(), "more")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
+	if _, err := a.Replace(ctx, base, []*entry.Entry{keep}, []string{gone.ID.String()}, day); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := clone(t, url)
+	log, err := b.Fetch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := bodies(log); len(got) != 1 || got[0] != "keep" {
+		t.Errorf("entries = %v", got)
+	}
+	if len(log.Dropped) != 1 || log.Dropped[0] != gone.ID.String() || log.Invalid != 0 {
+		t.Errorf("dropped = %v invalid = %d", log.Dropped, log.Invalid)
+	}
+	if !log.CompactedAt.Equal(day) || log.Commits != 1 {
+		t.Errorf("compactedAt %v commits %d", log.CompactedAt, log.Commits)
+	}
+	// Stale lease: a's old base no longer matches.
+	if _, err := a.Replace(ctx, base, nil, nil, day); !errors.Is(err, ErrConflict) {
+		t.Errorf("stale replace: %v", err)
+	}
+	// Appends after compaction keep the dropped note.
+	if _, err := b.Append(ctx, log.Base, []*entry.Entry{mk(t, time.Now(), "after")}); err != nil {
+		t.Fatal(err)
+	}
+	log, _ = a.Fetch(ctx)
+	if len(log.Dropped) != 1 || len(log.Entries) != 2 || log.Commits != 2 {
+		t.Errorf("after append: %d entries, dropped %v, commits %d", len(log.Entries), log.Dropped, log.Commits)
+	}
+	_ = dir
+}
+
+func TestArchiveUnionAndDrop(t *testing.T) {
+	ctx := context.Background()
+	_, dir := clone(t, remote(t))
+	ar := NewArchive(gitx.New(dir, t.TempDir()))
+	m1, m2 := mk(t, time.Now(), "one"), mk(t, time.Now(), "two")
+	rid, _ := entry.Mint(time.Now())
+	ret := &entry.Entry{ID: rid, V: 1, Op: entry.OpRetract, Target: m2.ID.String(), Reason: "wrong"}
+	entry.Format(ret)
+	pid, _ := entry.Mint(time.Now())
+	tomb := &entry.Entry{ID: pid, V: 1, Op: entry.OpPurge, Target: m2.ID.String()}
+	entry.Format(tomb)
+
+	if err := ar.Union(ctx, []*entry.Entry{m1, m2, ret}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := ar.Union(ctx, []*entry.Entry{m1, tomb}, []string{"01K8ZZZZZZZZZZZZZZZZZZZZZZ"}); err != nil {
+		t.Fatal(err)
+	}
+	log, _ := ar.Read(ctx)
+	if len(log.Entries) != 4 || len(log.Dropped) != 1 {
+		t.Fatalf("archive: %d entries, %v dropped", len(log.Entries), log.Dropped)
+	}
+	before := git(t, dir, "rev-parse", ArchiveRef)
+	if err := ar.Union(ctx, []*entry.Entry{m1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if git(t, dir, "rev-parse", ArchiveRef) != before {
+		t.Error("no-op union rewrote the archive")
+	}
+	removed, err := ar.Drop(ctx, map[string]bool{m2.ID.String(): true})
+	if err != nil || !removed {
+		t.Fatalf("drop: %v %v", removed, err)
+	}
+	log, _ = ar.Read(ctx)
+	if got := len(log.Entries); got != 2 { // m1 and the tombstone
+		t.Errorf("after drop: %d entries", got)
+	}
+	if parents := git(t, dir, "rev-list", "--count", ArchiveRef); parents != "1" {
+		t.Errorf("archive should be a parentless snapshot, history %s", parents)
+	}
+	if err := ExpireReflogs(ctx, gitx.New(dir, t.TempDir())); err != nil {
+		t.Fatal(err)
+	}
+}

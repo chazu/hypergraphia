@@ -68,7 +68,7 @@ readable by anyone who can read the repository.`,
 				remote = ""
 			}
 			if url != st.RemoteURL || st.Visibility == "" {
-				st.Visibility = checkVisibility(ctx, url)
+				st.Visibility = app.CheckVisibility(ctx, url)
 			}
 			switch {
 			case st.Visibility == visibility.Public && !publicOK:
@@ -82,7 +82,7 @@ readable by anyone who can read the repository.`,
 			case publicOK:
 				st.Visibility = "acknowledged"
 			}
-			st.Remote, st.RemoteURL = remote, url
+			st.Remote, st.RemoteURL, st.CheckedAt = remote, url, a.Now()
 			st.UserEmail = a.Git.Config(ctx, "user.email")
 			if err := d.Save(st); err != nil {
 				return err
@@ -144,17 +144,6 @@ readable by anyone who can read the repository.`,
 	c.Flags().BoolVar(&noSkill, "no-skill", false, "do not install the agent skill")
 	c.Flags().BoolVar(&publicOK, "public-ok", false, "accept a public or unverifiable remote (humans only)")
 	return c
-}
-
-// checkVisibility classifies a remote; local paths need no check.
-func checkVisibility(ctx context.Context, url string) string {
-	switch {
-	case url == "":
-		return "local"
-	case strings.HasPrefix(url, "/"), strings.HasPrefix(url, "file://"), strings.HasPrefix(url, "."):
-		return "local"
-	}
-	return visibility.Check(ctx, nil, "", url)
 }
 
 func firstSync(ctx context.Context, a *app.App) (int, error) {

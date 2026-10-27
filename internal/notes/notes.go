@@ -19,6 +19,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/chazu/hypergraphia/internal/entry"
 	"github.com/chazu/hypergraphia/internal/gitx"
@@ -93,9 +96,25 @@ func (t *Transport) ReadLocal(ctx context.Context) (*Log, error) {
 }
 
 func (t *Transport) read(ctx context.Context, commit string) (*Log, error) {
-	blobs, err := t.shardBlobs(ctx, commit)
+	es, err := t.lsTree(ctx, commit)
 	if err != nil {
 		return nil, err
+	}
+	dropAnchor, err := t.anchorFor(ctx, droppedName)
+	if err != nil {
+		return nil, err
+	}
+	var blobs []string
+	dropBlob := ""
+	for _, e := range es {
+		if e.typ != "blob" {
+			continue
+		}
+		if strings.ReplaceAll(e.path, "/", "") == dropAnchor {
+			dropBlob = e.oid
+			continue
+		}
+		blobs = append(blobs, e.oid)
 	}
 	log := &Log{Base: commit}
 	contents, err := t.catBlobs(ctx, blobs)
@@ -118,7 +137,50 @@ func (t *Transport) read(ctx context.Context, commit string) (*Log, error) {
 			}
 		}
 	}
+	if dropBlob != "" {
+		c, err := t.catBlobs(ctx, []string{dropBlob})
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range strings.Fields(c[0]) {
+			if _, err := ulid.ParseStrict(id); err == nil {
+				log.Dropped = append(log.Dropped, id)
+			}
+		}
+	}
+	if err := t.history(ctx, commit, log); err != nil {
+		return nil, err
+	}
 	return log, nil
+}
+
+// compactPrefix starts the message of a compaction commit.
+const compactPrefix = "hypergraphia compact cutoff="
+
+// history fills the last compaction day and the commit count since then.
+// Compaction commits are parentless, so the root commit is the last one.
+func (t *Transport) history(ctx context.Context, commit string, log *Log) error {
+	n, err := t.Git.Output(ctx, "rev-list", "--count", commit)
+	if err != nil {
+		return err
+	}
+	fmt.Sscan(n, &log.Commits)
+	roots, err := t.Git.Output(ctx, "rev-list", "--max-parents=0", commit)
+	if err != nil {
+		return err
+	}
+	for _, root := range strings.Fields(roots) {
+		msg, err := t.Git.Output(ctx, "log", "-1", "--format=%s", root)
+		if err != nil {
+			return err
+		}
+		if day, ok := strings.CutPrefix(msg, compactPrefix); ok {
+			if d, err := time.Parse("2006-01-02", strings.TrimSpace(day)); err == nil && d.After(log.CompactedAt) {
+				log.CompactedAt = d
+			}
+		}
+	}
+	return nil
 }
 
 // treeEntry is one entry of the notes tree.
@@ -147,22 +209,6 @@ func (t *Transport) lsTree(ctx context.Context, commit string) ([]treeEntry, err
 		es = append(es, treeEntry{mode: f[0], typ: f[1], oid: f[2], path: path})
 	}
 	return es, nil
-}
-
-// shardBlobs returns the blob ids of every note in commit's tree. Paths may be
-// flat or fanned out (ab/cdef…) if someone wrote the ref with git notes.
-func (t *Transport) shardBlobs(ctx context.Context, commit string) ([]string, error) {
-	es, err := t.lsTree(ctx, commit)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, e := range es {
-		if e.typ == "blob" {
-			out = append(out, e.oid)
-		}
-	}
-	return out, nil
 }
 
 // catBlobs reads blobs through one cat-file --batch process.
@@ -201,21 +247,29 @@ func (t *Transport) catBlobs(ctx context.Context, oids []string) ([]string, erro
 // ShardName is the month shard an entry belongs to.
 func ShardName(e *entry.Entry) string { return e.Time().UTC().Format("2006-01") }
 
-// anchor returns the object id a shard's note is attached to. The object is
+// droppedName names the note listing compacted memory ids.
+const droppedName = "hypergraphia dropped"
+
+// anchor returns the object id a shard's note is attached to.
+func (t *Transport) anchor(ctx context.Context, shard string) (string, error) {
+	return t.anchorFor(ctx, "hypergraphia shard "+shard)
+}
+
+// anchorFor returns the object id a named note is attached to. The object is
 // never written; its id is just the hash of a fixed string, computed by the
 // repo's own hash function (SHA-1 or SHA-256).
-func (t *Transport) anchor(ctx context.Context, shard string) (string, error) {
+func (t *Transport) anchorFor(ctx context.Context, name string) (string, error) {
 	t.anchorMu.Lock()
 	defer t.anchorMu.Unlock()
-	if a, ok := t.anchors[shard]; ok {
+	if a, ok := t.anchors[name]; ok {
 		return a, nil
 	}
-	out, err := t.Git.Run(ctx, strings.NewReader("hypergraphia shard "+shard), "hash-object", "--stdin")
+	out, err := t.Git.Run(ctx, strings.NewReader(name), "hash-object", "--stdin")
 	if err != nil {
 		return "", err
 	}
 	a := strings.TrimSpace(string(out))
-	t.anchors[shard] = a
+	t.anchors[name] = a
 	return a, nil
 }
 
@@ -289,6 +343,64 @@ func (t *Transport) buildAppend(ctx context.Context, base string, add []*entry.E
 		args = append(args, "-p", base)
 	}
 	out, err := t.Git.RunEnv(ctx, commitEnv, nil, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Replace overwrites the remote log with exactly all and dropped as one
+// parentless commit, pushed with a lease on base. It is how compaction and
+// purge rewrite the shared log.
+func (t *Transport) Replace(ctx context.Context, base string, all []*entry.Entry, dropped []string, compactedAt time.Time) (string, error) {
+	commit, err := t.buildSnapshot(ctx, all, dropped, compactPrefix+compactedAt.UTC().Format("2006-01-02"))
+	if err != nil {
+		return "", err
+	}
+	if err := t.push(ctx, base, commit); err != nil {
+		return "", err
+	}
+	if _, err := t.Git.Run(ctx, nil, "update-ref", t.Local, commit); err != nil {
+		return "", err
+	}
+	return commit, nil
+}
+
+// buildSnapshot writes a parentless commit holding entries and the dropped
+// list.
+func (t *Transport) buildSnapshot(ctx context.Context, all []*entry.Entry, dropped []string, message string) (string, error) {
+	lines := map[string][]string{}
+	for _, e := range all {
+		a, err := t.anchor(ctx, ShardName(e))
+		if err != nil {
+			return "", err
+		}
+		lines[a] = append(lines[a], e.Raw)
+	}
+	es := map[string]treeEntry{}
+	for a, ls := range lines {
+		blob, err := t.writeBlob(ctx, SortUniq(ls))
+		if err != nil {
+			return "", err
+		}
+		es[a] = treeEntry{mode: "100644", typ: "blob", oid: blob}
+	}
+	if len(dropped) > 0 {
+		a, err := t.anchorFor(ctx, droppedName)
+		if err != nil {
+			return "", err
+		}
+		blob, err := t.writeBlob(ctx, SortUniq(dropped))
+		if err != nil {
+			return "", err
+		}
+		es[a] = treeEntry{mode: "100644", typ: "blob", oid: blob}
+	}
+	tree, err := t.mktree(ctx, es)
+	if err != nil {
+		return "", err
+	}
+	out, err := t.Git.RunEnv(ctx, commitEnv, nil, "commit-tree", tree, "-m", message)
 	if err != nil {
 		return "", err
 	}
