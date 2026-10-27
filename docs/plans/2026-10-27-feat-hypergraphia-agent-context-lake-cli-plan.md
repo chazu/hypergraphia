@@ -647,6 +647,16 @@ action is attributed and visible in `log`.
   (`HYPERGRAPHIA_E2E_GITHUB=1`): sync/compaction/history over real GitHub, no
   workflow runs or `push`/`create` webhook deliveries for notes pushes.
 
+*Implementation notes (2026-10-27):* compaction age uses the earliest
+retirement (retract, or supersession by a non-purged memory) — there is no
+valid-time field in v1, so `max(tx, vt)` reduces to tx time. Purge
+propagation expires our refs' reflogs but leaves object deletion to git's
+normal gc (a background `git prune` in a user's repository would delete their
+own dangling objects too); `purge --prune` does it on request. `show --as-of`
+needed litelog `AsOfTxTime` and a fix to temporal `Pull` (litelog `ccf53eb`,
+`bfdadec`). GitHub E2E (`make e2e`) verified compaction, history push and no
+workflow/webhook triggers on the spike repo.
+
 ### v1.2 — recall depth & polish
 
 - Local usage boost (`local.db`, plus `hypergraphia used <id>` signal),
@@ -693,11 +703,11 @@ action is attributed and visible in `log`.
 - [x] `deinit` removes hooks/skill; the state dir is removable with no other traces.
 
 ### Functional (v1.1)
-- [ ] Compaction drops only memories superseded/retracted > 90 days ago (by
+- [x] Compaction drops only memories superseded/retracted > 90 days ago (by
       `max(tx)`), keeps tombstones and the dropped list, and is safe under
       concurrency; stale clones can't resurrect dropped or purged content.
-- [ ] `history push` restores archived entries without republishing purged ones.
-- [ ] Purge removes content from live, history, archives and local DB files.
+- [x] `history push` restores archived entries without republishing purged ones.
+- [x] Purge removes content from live, history, archives and local DB files.
 
 ### Non-Functional
 - [ ] **Zero effect**: non-users see nothing; for users, sync and hooks leave the
@@ -710,7 +720,7 @@ action is attributed and visible in `log`.
 ### Quality Gates
 - [ ] `go test ./...` green (multi-clone suite, golden recall gates, import-graph
       test); `go vet` + `gofmt` clean.
-- [ ] v1.1: GitHub E2E suite green against the spike repo.
+- [x] v1.1: GitHub E2E suite green against the spike repo.
 
 ## Success Metrics
 

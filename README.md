@@ -69,15 +69,34 @@ agent) can allow an entropy finding with `--allow <finding_id>`; gitleaks
 findings cannot be allowed.
 
 If something sensitive was pushed anyway: `hypergraphia purge <id>` removes it
-locally and writes a tombstone so other clones drop it. **Purge is cleanup, not
-containment — rotate the credential.** A force-push does not scrub GitHub's
-caches.
+locally, rewrites the shared log and the shared history right away, and leaves
+a tombstone so every other clone drops it as it syncs (from its index, history
+store and archive). `--prune` also deletes unreachable git objects locally.
+**Purge is cleanup, not containment — rotate the credential.** GitHub may
+keep serving unreferenced objects by SHA.
 
-## Retention
+## Retention and history
 
-Memories are immutable; corrections supersede, removals retract. Compaction of
-memories superseded or retracted more than 90 days ago, and restoring history
-from any workstation (`history push`), arrive in v1.1.
+Memories are immutable; corrections supersede, removals retract. Any client's
+sync compacts the shared log at most weekly: memories retracted or superseded
+more than **90 days** ago leave `refs/notes/hypergraphia` (their ids are kept,
+so no stale clone can push them back). Purges rewrite the shared log
+immediately.
+
+Nothing is lost locally: every clone keeps everything it has seen in a local
+archive (`refs/hypergraphia/archive`, never pushed).
+
+```sh
+hypergraphia log 01K8X4K7QZ8M                # a memory's timeline
+hypergraphia show 01K8X4K7QZ8M --as-of 2026-06-01
+hypergraphia list --as-of 30d                # what was active 30 days ago
+hypergraphia history push                    # share compacted history (humans only)
+hypergraphia log 01K8X4K7QZ8M --history      # fetch history others restored
+```
+
+`history push` publishes to `refs/notes/hypergraphia-history`; purged
+content is never republished. The `--as-of` views come from a litelog
+bitemporal store kept in `.git/hypergraphia/store.db`.
 
 ## Uninstall
 
@@ -93,6 +112,7 @@ The shared memories on the remote are untouched.
 ```sh
 make test     # unit + multi-clone integration + golden recall gates
 make bench    # recall over 5k memories
+make e2e      # against a real GitHub repo (pushes to it)
 make build    # signed local binary
 ```
 

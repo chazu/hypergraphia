@@ -80,4 +80,11 @@ retract it with `--reason "needs-purge: <why>"` and tell the user, who can run
 ## 7. Human-only commands
 
 Do not run these; they refuse under agents anyway: `purge`, `deinit`,
-`init --public-ok`, `--allow`, `--allow-write`.
+`history push`, `init --public-ok`, `--allow`, `--allow-write`.
+
+## 8. History
+
+`hypergraphia log <id>` shows a memory's timeline; `show <id> --as-of <time>`
+and `list --as-of <time>` show what the team's memory said at a past moment
+(times: RFC3339, YYYY-MM-DD, or e.g. `30d`). Use these when a memory seems to
+contradict the code and you want to know when and why it changed.

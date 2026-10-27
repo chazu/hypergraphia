@@ -19,7 +19,7 @@ endif
 SKILL_SRC := skills/hypergraphia
 SKILL_DEST := $(HOME)/.claude/skills/hypergraphia
 
-.PHONY: build install install-skill sign verify clean test vet bench
+.PHONY: build install install-skill sign verify clean test vet bench e2e
 
 ## build: compile + ad-hoc sign the local binary
 build:
@@ -54,6 +54,11 @@ test:
 ## bench: recall and index benchmarks
 bench:
 	go test -run '^$$' -bench . -benchtime 20x ./internal/recall/
+
+## e2e: sync, compaction and history push against a real GitHub repo
+## (HYPERGRAPHIA_E2E_REPO=owner/name, default chazu/hypergraphia-notes-spike)
+e2e:
+	HYPERGRAPHIA_E2E_GITHUB=1 go test -run TestGitHubE2E -v -timeout 300s ./internal/app/
 
 ## vet: static checks
 vet:
