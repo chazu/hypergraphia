@@ -553,8 +553,11 @@ action is attributed and visible in `log`.
 #### Phase 1: Local core (2–3 days)
 - `entry` (codec, validation, causal ULID minting), `state` (paths, both locks,
   generation dirs, 0700/0600), `secrets`, `outbox` (+allow sidecar), `index`
-  (schema, set-wise status, FTS tables, anchor table), `store` (litelog schema,
-  single-writer discipline), `replay` (applied sets, generations).
+  (schema, set-wise status, FTS tables, anchor table), `replay` (applied sets,
+  generations).
+- *Implementation note (2026-10-27):* the litelog `store` moved to v1.1 — its
+  only consumers are `log` and `show --as-of`, which are v1.1 features, so in v1
+  it would be code without a caller.
 - Commands: `init` (state only), `remember`, `show`, `list`, `retract`, `purge`
   (local), `outbox`, `rebuild`, `status`.
 - Tests:
@@ -625,6 +628,9 @@ action is attributed and visible in `log`.
 
 - Archive snapshot ref (seeded from live; union-before-anything; crash recovery);
   replay source gains the archive; pending computation gains archive/dropped/tombstones.
+- litelog `store` view (schema, single-writer discipline under the sync lock,
+  lazy/background rebuild when entries arrive out of order) backing `log` and
+  `show --as-of`.
 - `compact` package + cadence + `Transport.Replace`; `dropped` note; purge remote
   rewrite (immediate) + propagation (archive drop, reflog expiry, gc, history
   rewrite); `history push`; `log [--history]`; `show --as-of`; visibility re-check
@@ -668,7 +674,7 @@ action is attributed and visible in `log`.
 - [ ] `init` creates only `<git-common-dir>/hypergraphia/`, refs under
       `refs/hypergraphia/`, and (unless `--hooks=none`) user-global hook + skill
       entries.
-- [ ] `remember` rejects gitleaks and entropy findings with rule, offset, length and
+- [x] `remember` rejects gitleaks and entropy findings with rule, offset, length and
       ≤ 4 chars; agents get `secret_detected` JSON and exit 4; `--allow` works only
       for entropy findings from a human TTY.
 - [ ] `sync` appends with fast-forward pushes, retries races, and never loses or

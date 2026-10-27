@@ -3,10 +3,14 @@ module github.com/chazu/hypergraphia
 go 1.26.6
 
 require (
+	github.com/kljensen/snowball v0.10.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/rs/zerolog v1.33.0
+	github.com/spf13/cobra v1.9.1
 	github.com/zricethezav/gitleaks/v8 v8.30.1
+	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
+	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (
@@ -18,7 +22,6 @@ require (
 	github.com/STARRY-S/zip v0.2.1 // indirect
 	github.com/andybalholm/brotli v1.1.2-0.20250424173009-453214e765f3 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
@@ -36,9 +39,9 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
-	github.com/kljensen/snowball v0.10.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -77,12 +80,11 @@ require (
 	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.65.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.37.1 // indirect
-	zombiezen.com/go/sqlite v1.4.2 // indirect
 )
