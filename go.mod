@@ -18,11 +18,13 @@ require (
 	github.com/STARRY-S/zip v0.2.1 // indirect
 	github.com/andybalholm/brotli v1.1.2-0.20250424173009-453214e765f3 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/charmbracelet/lipgloss v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/semgroup v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gitleaks/go-gitdiff v0.9.1 // indirect
@@ -36,6 +38,7 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
+	github.com/kljensen/snowball v0.10.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -48,9 +51,11 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/muesli/reflow v0.2.1-0.20210115123740-9e1d0d53df68 // indirect
 	github.com/muesli/termenv v0.15.1 // indirect
+	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/nwaples/rardecode/v2 v2.1.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
@@ -70,9 +75,14 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
-	golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa // indirect
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	modernc.org/libc v1.65.7 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.37.1 // indirect
+	zombiezen.com/go/sqlite v1.4.2 // indirect
 )
