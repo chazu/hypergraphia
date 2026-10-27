@@ -45,7 +45,7 @@ func syncCmd() *cobra.Command {
 					fmt.Fprintln(w, "no remote configured: memories stay local")
 					return
 				}
-				fmt.Fprintf(w, "pushed %d, remote has %d entries\n", res.Pushed, res.Fetched)
+				fmt.Fprintf(w, "fetched %d entries, pushed %d\n", res.Fetched, res.Pushed)
 				for _, id := range res.HeldBack {
 					fmt.Fprintf(w, "held back %s: the secret scan flagged it (see `hypergraphia outbox list`)\n", entry.Short(id))
 				}
