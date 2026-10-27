@@ -10,6 +10,10 @@
 // active otherwise.
 package index
 
+// SchemaVersion changes whenever schemaSQL changes. The index is derived, so
+// a mismatch is handled by rebuilding, never by migrating.
+const SchemaVersion = "3"
+
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -69,13 +73,17 @@ CREATE TABLE IF NOT EXISTS anchor (
     path TEXT    NOT NULL,
     id   TEXT    NOT NULL,
     glob INTEGER NOT NULL,
+    dir  TEXT    NOT NULL,   -- parent directory of a non-glob path
     PRIMARY KEY (path, id)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS anchor_id ON anchor (id);
+CREATE INDEX IF NOT EXISTS anchor_dir ON anchor (dir) WHERE glob = 0;
+CREATE INDEX IF NOT EXISTS anchor_glob ON anchor (glob, path) WHERE glob = 1;
 
 CREATE TABLE IF NOT EXISTS synonym (
-    term TEXT NOT NULL,
-    grp  TEXT NOT NULL,
+    term    TEXT NOT NULL,   -- stemmed, for scoring
+    surface TEXT NOT NULL,   -- as written, for FTS queries
+    grp     TEXT NOT NULL,
     PRIMARY KEY (term, grp)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS synonym_grp ON synonym (grp);

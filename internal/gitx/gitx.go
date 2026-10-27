@@ -116,6 +116,7 @@ func (g *Git) RunEnv(ctx context.Context, extraEnv []string, stdin io.Reader, ar
 	}
 	full = append(full, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
+	cmd.WaitDelay = time.Second
 	cmd.Env = append(append([]string(nil), g.env...), extraEnv...)
 	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer

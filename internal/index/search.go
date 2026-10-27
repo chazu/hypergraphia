@@ -40,27 +40,33 @@ func (db *DB) DocFreq(terms []string) (map[string]int, error) {
 	return out, err
 }
 
-// Synonyms returns, for each analyzed term, the other terms sharing a synonym
-// group with it.
-func (db *DB) Synonyms(terms []string) (map[string][]string, error) {
-	out := map[string][]string{}
+// Synonym is a term sharing a group with a query term.
+type Synonym struct {
+	Term    string // stemmed
+	Surface string // as written
+}
+
+// Synonyms returns, for each stemmed term, the other members of its synonym
+// groups.
+func (db *DB) Synonyms(terms []string) (map[string][]Synonym, error) {
+	out := map[string][]Synonym{}
 	if len(terms) == 0 {
 		return out, nil
 	}
 	err := sqlitex.Execute(db.conn,
-		`SELECT DISTINCT a.term, b.term FROM synonym a JOIN synonym b ON a.grp = b.grp
+		`SELECT DISTINCT a.term, b.term, b.surface FROM synonym a JOIN synonym b ON a.grp = b.grp
          WHERE a.term IN (`+placeholders(len(terms))+`) AND b.term != a.term ORDER BY a.term, b.term`,
 		&sqlitex.ExecOptions{Args: anys(terms), ResultFunc: func(s *sqlite.Stmt) error {
-			out[s.ColumnText(0)] = append(out[s.ColumnText(0)], s.ColumnText(1))
+			out[s.ColumnText(0)] = append(out[s.ColumnText(0)], Synonym{Term: s.ColumnText(1), Surface: s.ColumnText(2)})
 			return nil
 		}})
 	return out, err
 }
 
-// SynonymGroups returns every synonym group as stemmed terms.
+// SynonymGroups returns every synonym group as written.
 func (db *DB) SynonymGroups() (map[string][]string, error) {
 	out := map[string][]string{}
-	err := sqlitex.Execute(db.conn, "SELECT grp, term FROM synonym ORDER BY grp, term", &sqlitex.ExecOptions{
+	err := sqlitex.Execute(db.conn, "SELECT grp, surface FROM synonym ORDER BY grp, surface", &sqlitex.ExecOptions{
 		ResultFunc: func(s *sqlite.Stmt) error {
 			out[s.ColumnText(0)] = append(out[s.ColumnText(0)], s.ColumnText(1))
 			return nil
@@ -138,7 +144,9 @@ func (db *DB) ExactAnchors(paths []string) ([]AnchorHit, error) {
 		norm[i] = NormalizePath(p)
 	}
 	err := sqlitex.Execute(db.conn,
-		`SELECT a.id, a.path FROM anchor a JOIN memory m ON m.id = a.id
+		// CROSS JOIN fixes the join order: probe anchors by path first, then
+		// check each hit's status (never scan every active memory).
+		`SELECT a.id, a.path FROM anchor a CROSS JOIN memory m ON m.id = a.id
          WHERE a.glob = 0 AND m.status = 'active' AND a.path IN (`+placeholders(len(norm))+`)`,
 		&sqlitex.ExecOptions{Args: anys(norm), ResultFunc: func(s *sqlite.Stmt) error {
 			out = append(out, AnchorHit{ID: s.ColumnText(0), Path: s.ColumnText(1)})
@@ -151,9 +159,26 @@ func (db *DB) ExactAnchors(paths []string) ([]AnchorHit, error) {
 func (db *DB) GlobAnchors() ([]AnchorHit, error) {
 	var out []AnchorHit
 	err := sqlitex.Execute(db.conn,
-		`SELECT a.id, a.path FROM anchor a JOIN memory m ON m.id = a.id WHERE a.glob = 1 AND m.status = 'active'`,
+		`SELECT a.id, a.path FROM anchor a CROSS JOIN memory m ON m.id = a.id WHERE a.glob = 1 AND m.status = 'active'`,
 		&sqlitex.ExecOptions{ResultFunc: func(s *sqlite.Stmt) error {
 			out = append(out, AnchorHit{ID: s.ColumnText(0), Path: s.ColumnText(1), Glob: true})
+			return nil
+		}})
+	return out, err
+}
+
+// DirAnchors returns non-glob anchors of active memories whose parent
+// directory is one of dirs (files next to a context file).
+func (db *DB) DirAnchors(dirs []string) ([]AnchorHit, error) {
+	var out []AnchorHit
+	if len(dirs) == 0 {
+		return out, nil
+	}
+	err := sqlitex.Execute(db.conn,
+		`SELECT a.id, a.path FROM anchor a CROSS JOIN memory m ON m.id = a.id
+         WHERE a.glob = 0 AND m.status = 'active' AND a.dir IN (`+placeholders(len(dirs))+`)`,
+		&sqlitex.ExecOptions{Args: anys(dirs), ResultFunc: func(s *sqlite.Stmt) error {
+			out = append(out, AnchorHit{ID: s.ColumnText(0), Path: s.ColumnText(1)})
 			return nil
 		}})
 	return out, err

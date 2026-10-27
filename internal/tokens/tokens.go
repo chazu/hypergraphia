@@ -150,24 +150,44 @@ func Stem(w string) string {
 func Analyze(texts ...string) []string {
 	var out []string
 	add := func(w string) {
-		if w == "" || IsStopword(w) {
+		if len(w) < 2 || IsStopword(w) {
 			return
 		}
 		out = append(out, Stem(w))
 	}
 	for _, text := range texts {
 		for _, tok := range Raw(text) {
-			for _, w := range Words(tok) {
+			for _, w := range TokenWords(tok) {
 				add(w)
-			}
-			if IsCodeLike(tok) {
-				if parts := SplitIdent(tok); len(parts) > 1 {
-					for _, p := range parts {
-						add(p)
-					}
-				}
 			}
 		}
 	}
 	return out
+}
+
+// TokenWords returns the words of one raw token: its letter/digit runs, plus
+// the split parts of a code-like token that are not already among them
+// (ParseHTTPConfig → parsehttpconfig parse http config; flags.local.json →
+// flags local json, each once).
+func TokenWords(tok string) []string {
+	words := Words(tok)
+	if !IsCodeLike(tok) {
+		return words
+	}
+	parts := SplitIdent(tok)
+	if len(parts) < 2 {
+		return words
+	}
+	have := map[string]int{}
+	for _, w := range words {
+		have[w]++
+	}
+	for _, p := range parts {
+		if have[p] > 0 {
+			have[p]--
+			continue
+		}
+		words = append(words, p)
+	}
+	return words
 }

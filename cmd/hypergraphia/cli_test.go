@@ -168,3 +168,26 @@ func randToken(n int) string {
 	}
 	return string(b)
 }
+
+func TestRecallCommand(t *testing.T) {
+	repo(t)
+	run(t, "init")
+	data[rememberData](t, run(t, "remember", "-k", "gotcha", "-t", "postgres", "-a", "internal/store/**",
+		"Integration tests need Postgres 16; run make db-up first."))
+	data[rememberData](t, run(t, "remember", "-k", "fact", "The release workflow pushes images to the internal registry."))
+	got := data[recallData](t, run(t, "recall", "--no-context", "the store integration tests cannot connect to postgres"))
+	if got.Abstained || len(got.Results) != 1 || !strings.Contains(got.Results[0].Body, "Postgres 16") {
+		t.Fatalf("recall = %+v", got)
+	}
+	if got.Results[0].Short == "" || got.Results[0].Flags == nil {
+		t.Errorf("result shape: %+v", got.Results[0])
+	}
+	none := data[recallData](t, run(t, "recall", "--no-context", "write a haiku about autumn"))
+	if !none.Abstained || len(none.Results) != 0 {
+		t.Errorf("unrelated query should abstain: %+v", none)
+	}
+	anch := data[recallData](t, run(t, "recall", "--no-context", "-f", "internal/store/accounts.go"))
+	if len(anch.Results) != 1 {
+		t.Errorf("anchor-only recall = %+v", anch)
+	}
+}

@@ -1,0 +1,55 @@
+{"prompt":"The integration tests in the store package are failing with connection refused, can you fix them?","files":["internal/store/accounts.go"],"relevant":{"m45":2,"m43":1}}
+{"prompt":"Add a new field for the HTTP timeout to the config","files":["internal/config/http.go"],"relevant":{"m01":2,"m42":1}}
+{"prompt":"ledgerd crashes on startup with a nil pointer in ParseHTTPConfig","files":[],"relevant":{"m01":2}}
+{"prompt":"Implement currency conversion for transfers between EUR and USD accounts","files":["internal/fx/convert.go"],"relevant":{"m13":2,"m36":2,"m10":1,"m02":1}}
+{"prompt":"Why do we use NATS instead of Kafka?","files":[],"relevant":{"m04":2}}
+{"prompt":"I added a migration but it doesn't seem to run","files":["migrations/20261020_add_index.sql"],"relevant":{"m05":2}}
+{"prompt":"Write a handler that returns 404 when the account is not found","files":["internal/api/accounts.go"],"relevant":{"m06":2,"m17":1,"m29":1}}
+{"prompt":"Customers are getting duplicate transfers when they retry requests","files":["internal/api/transfers.go"],"relevant":{"m07":2}}
+{"prompt":"Two concurrent transfers overdrew an account, how is that possible?","files":["internal/ledger/transfer.go"],"relevant":{"m08":2}}
+{"prompt":"Update the generated API client for the new endpoint","files":["internal/api/gen/client.go"],"relevant":{"m09":2}}
+{"prompt":"Make sure we don't log card numbers in the new payment logs","files":["internal/payments/charge.go"],"relevant":{"m11":2}}
+{"prompt":"The tests pass locally but CI fails with cannot connect to the Docker daemon","files":[".github/workflows/ci.yml"],"relevant":{"m12":2}}
+{"prompt":"How should rounding work when converting amounts between currencies?","files":[],"relevant":{"m13":2}}
+{"prompt":"Turn on the new dashboard flag locally","files":[],"relevant":{"m14":2}}
+{"prompt":"The nightly reconciliation reported a mismatch with the bank file","files":["cmd/reconcile/main.go"],"relevant":{"m15":2,"m16":2}}
+{"prompt":"Parsing the settlement CSV fails on decimal values","files":["internal/settlement/csv.go"],"relevant":{"m16":2}}
+{"prompt":"Some API keys are getting 429 responses, what is the limit?","files":[],"relevant":{"m18":2}}
+{"prompt":"We're leaking Redis connections in the cache subscriber","files":["internal/cache/redis.go"],"relevant":{"m19":2}}
+{"prompt":"How do I cut a new release?","files":[],"relevant":{"m20":2}}
+{"prompt":"Should new account IDs be UUIDs?","files":["internal/ids/ids.go"],"relevant":{"m21":2}}
+{"prompt":"The interest accrual test is flaky around midnight","files":["internal/ledger/interest_test.go"],"relevant":{"m22":2,"m23":1}}
+{"prompt":"How is interest calculated and when is it posted?","files":[],"relevant":{"m23":2}}
+{"prompt":"Add a query to list accounts by owner","files":["internal/store/queries/accounts.sql"],"relevant":{"m24":2}}
+{"prompt":"Converting a NUMERIC column from sqlc gives weird results","files":["internal/store/balances.go"],"relevant":{"m25":2}}
+{"prompt":"A webhook delivery failed for a merchant, how do I resend it?","files":[],"relevant":{"m26":2,"m28":1}}
+{"prompt":"Verify the webhook signature in our test client","files":["internal/webhooks/sign_test.go"],"relevant":{"m27":2}}
+{"prompt":"Add a public endpoint for listing refunds","files":["internal/api/refunds.go"],"relevant":{"m29":2,"m30":1}}
+{"prompt":"Customer wants to refund half of a transfer","files":["internal/ledger/refund.go"],"relevant":{"m30":2}}
+{"prompt":"Fix the race in the batch processor goroutines","files":["internal/batch/worker.go"],"relevant":{"m32":2,"m34":1}}
+{"prompt":"The transfer endpoint got slow, how do I profile it?","files":["cmd/ledgerd/main.go"],"relevant":{"m33":2,"m41":1}}
+{"prompt":"Send 800 transfers in a single batch request","files":[],"relevant":{"m34":2}}
+{"prompt":"fxrates returned a zero rate for JPY to CHF","files":["internal/fx/client.go"],"relevant":{"m36":2,"m10":1}}
+{"prompt":"Change the welcome email template","files":["templates/email/welcome.html"],"relevant":{"m37":2}}
+{"prompt":"golangci-lint is failing on my branch","files":[],"relevant":{"m38":2}}
+{"prompt":"Delete the account of a customer who closed it","files":["internal/accounts/delete.go"],"relevant":{"m39":2,"m40":1}}
+{"prompt":"Closing an account returns 409 account_not_empty","files":["internal/accounts/close.go"],"relevant":{"m40":2}}
+{"prompt":"Where can I find transfer latency metrics?","files":[],"relevant":{"m41":2}}
+{"prompt":"Read the REGION environment variable in the fx client","files":["internal/fx/client.go"],"relevant":{"m42":2,"m36":1,"m10":1}}
+{"prompt":"psql can't connect to the docker compose database on 5432","files":["docker-compose.yml"],"relevant":{"m43":2}}
+{"prompt":"I need some demo data in my local database","files":[],"relevant":{"m44":2}}
+{"prompt":"Rename the variable foo to bar in this function","files":["internal/util/strings.go"],"relevant":{}}
+{"prompt":"Explain what a goroutine is","files":[],"relevant":{}}
+{"prompt":"Write a haiku about autumn leaves","files":[],"relevant":{}}
+{"prompt":"Fix the typo in the README","files":["README.md"],"relevant":{}}
+{"prompt":"Add a unit test for the string padding helper","files":["internal/util/pad_test.go"],"relevant":{"m35":2}}
+{"prompt":"What's the difference between a slice and an array in Go?","files":[],"relevant":{}}
+{"prompt":"Format this JSON file","files":["testdata/sample.json"],"relevant":{}}
+{"prompt":"Upgrade the frontend to React 19","files":[],"relevant":{}}
+{"prompt":"Can you summarize what this function does?","files":["internal/util/slug.go"],"relevant":{}}
+{"prompt":"Sort the imports in this file","files":["internal/util/strings.go"],"relevant":{}}
+{"prompt":"Ok thanks, that looks good","files":[],"relevant":{}}
+{"prompt":"Bump the version of the yaml library","files":["go.sum"],"relevant":{}}
+{"prompt":"Translate the error messages to French","files":["internal/i18n/messages.go"],"relevant":{}}
+{"prompt":"Draw an ASCII diagram of a binary tree","files":[],"relevant":{}}
+{"prompt":"Add a comment explaining this regex","files":["internal/util/regex.go"],"relevant":{}}

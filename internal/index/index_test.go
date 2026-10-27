@@ -1,6 +1,7 @@
 package index
 
 import (
+	"errors"
 	"math/rand/v2"
 	"path/filepath"
 	"sort"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/chazu/hypergraphia/internal/entry"
 )
@@ -230,7 +232,7 @@ func TestSynonymsAndAnchors(t *testing.T) {
 		t.Fatal(err)
 	}
 	syn, err := db.Synonyms([]string{"db"})
-	if err != nil || len(syn["db"]) != 2 {
+	if err != nil || len(syn["db"]) != 2 || syn["db"][0].Surface != "database" {
 		t.Errorf("synonyms = %v, %v", syn, err)
 	}
 	globs, _ := db.GlobAnchors()
@@ -282,5 +284,20 @@ func TestResolveAndReadOnly(t *testing.T) {
 	}
 	if _, err := ro.Apply(es); err == nil {
 		t.Error("read-only index accepted writes")
+	}
+}
+
+func TestSchemaVersionMismatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlitex.ExecuteTransient(db.conn, "UPDATE meta SET value = '0' WHERE key = 'schema_version'", nil); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if _, err := Open(path); !errors.Is(err, ErrSchemaChanged) {
+		t.Fatalf("want ErrSchemaChanged, got %v", err)
 	}
 }

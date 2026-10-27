@@ -57,6 +57,7 @@ func root() *cobra.Command {
 		rebuildCmd(),
 		statusCmd(),
 		syncCmd(),
+		recallCmd(),
 	)
 	return c
 }

@@ -5,6 +5,7 @@
 package replay
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,6 +60,9 @@ func CatchUp(d *state.Dir, es []*entry.Entry) (needRebuild bool, err error) {
 		return false, err
 	}
 	db, err := index.Open(path)
+	if errors.Is(err, index.ErrSchemaChanged) {
+		return true, nil // built by another version: rebuild
+	}
 	if err != nil {
 		return false, err
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"zombiezen.com/go/sqlite"
@@ -34,17 +35,58 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range []string{"PRAGMA synchronous=NORMAL;", "PRAGMA foreign_keys=OFF;"} {
+	for _, p := range append([]string{"PRAGMA synchronous=NORMAL;", "PRAGMA foreign_keys=OFF;"}, cachePragmas...) {
 		if err := sqlitex.ExecuteTransient(conn, p, nil); err != nil {
 			conn.Close()
 			return nil, err
 		}
 	}
+	// Check the version before touching the schema: an older database may
+	// lack columns the current script indexes.
+	if err := checkSchemaVersion(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	if err := sqlitex.ExecuteScript(conn, schemaSQL, nil); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("index schema: %w", err)
 	}
+	err = sqlitex.Execute(conn, "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+		&sqlitex.ExecOptions{Args: []any{SchemaVersion}})
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
 	return &DB{conn: conn}, nil
+}
+
+// cachePragmas give each connection a page cache and memory-mapped reads.
+var cachePragmas = []string{"PRAGMA cache_size=-16000;", "PRAGMA mmap_size=134217728;", "PRAGMA temp_store=MEMORY;"}
+
+// ErrSchemaChanged means the index was built by a different version and must
+// be rebuilt.
+var ErrSchemaChanged = errors.New("index schema changed; rebuild required")
+
+// checkSchemaVersion accepts a brand-new database or one at SchemaVersion.
+// Anything else (including databases from before versioning) must be rebuilt.
+func checkSchemaVersion(conn *sqlite.Conn) error {
+	tables := 0
+	err := sqlitex.Execute(conn, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
+		&sqlitex.ExecOptions{ResultFunc: func(s *sqlite.Stmt) error { tables = s.ColumnInt(0); return nil }})
+	if err != nil || tables == 0 {
+		return err // new database
+	}
+	var v string
+	err = sqlitex.Execute(conn, "SELECT value FROM meta WHERE key = 'schema_version'", &sqlitex.ExecOptions{
+		ResultFunc: func(s *sqlite.Stmt) error { v = s.ColumnText(0); return nil },
+	})
+	if err != nil {
+		return err
+	}
+	if v != SchemaVersion {
+		return ErrSchemaChanged
+	}
+	return nil
 }
 
 // OpenReadOnly opens an existing index for queries only. It never creates or
@@ -54,7 +96,13 @@ func OpenReadOnly(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := sqlitex.ExecuteTransient(conn, "PRAGMA query_only=ON;", nil); err != nil {
+	for _, p := range append([]string{"PRAGMA query_only=ON;"}, cachePragmas...) {
+		if err := sqlitex.ExecuteTransient(conn, p, nil); err != nil {
+			conn.Close()
+			return nil, err
+		}
+	}
+	if err := checkSchemaVersion(conn); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -126,8 +174,8 @@ func (db *DB) Apply(es []*entry.Entry) (res ApplyResult, err error) {
 			res.PurgedExisting = res.PurgedExisting || existed
 		case entry.OpSynonym:
 			for _, term := range e.Terms {
-				err := sqlitex.Execute(db.conn, `INSERT OR IGNORE INTO synonym (term, grp) VALUES (?, ?)`,
-					&sqlitex.ExecOptions{Args: []any{tokens.Stem(term), id}})
+				err := sqlitex.Execute(db.conn, `INSERT OR IGNORE INTO synonym (term, surface, grp) VALUES (?, ?, ?)`,
+					&sqlitex.ExecOptions{Args: []any{tokens.Stem(term), term, id}})
 				if err != nil {
 					return res, err
 				}
@@ -196,12 +244,13 @@ func (db *DB) insertMemory(e *entry.Entry, affected map[string]bool) error {
 		return err
 	}
 	for _, a := range e.Anchors {
-		glob := 0
-		if strings.ContainsAny(a, "*?[{") {
-			glob = 1
+		p := NormalizePath(a)
+		glob, dir := 0, path.Dir(p)
+		if strings.ContainsAny(p, "*?[{") {
+			glob, dir = 1, ""
 		}
-		if err := sqlitex.Execute(db.conn, `INSERT OR IGNORE INTO anchor (path, id, glob) VALUES (?, ?, ?)`,
-			&sqlitex.ExecOptions{Args: []any{NormalizePath(a), id, glob}}); err != nil {
+		if err := sqlitex.Execute(db.conn, `INSERT OR IGNORE INTO anchor (path, id, glob, dir) VALUES (?, ?, ?, ?)`,
+			&sqlitex.ExecOptions{Args: []any{p, id, glob, dir}}); err != nil {
 			return err
 		}
 	}
