@@ -22,6 +22,7 @@ const (
 	NoHooksDir  = "nohooks"
 	SessionsDir = "sessions"
 	SyncLog     = "sync.log"
+	HookLog     = "hook.log"
 	genPrefix   = "gen-"
 )
 
@@ -30,6 +31,7 @@ const (
 type State struct {
 	Remote     string    `json:"remote,omitempty"`
 	RemoteURL  string    `json:"remote_url,omitempty"`
+	UserEmail  string    `json:"user_email,omitempty"` // cached git user.email (the hook avoids exec'ing git config)
 	Visibility string    `json:"visibility,omitempty"` // public, private, acknowledged, unknown
 	Generation int       `json:"generation"`
 	LastSync   time.Time `json:"last_sync,omitempty"`

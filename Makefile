@@ -19,7 +19,7 @@ endif
 SKILL_SRC := skills/hypergraphia
 SKILL_DEST := $(HOME)/.claude/skills/hypergraphia
 
-.PHONY: build install install-skill sign verify clean test vet
+.PHONY: build install install-skill sign verify clean test vet bench
 
 ## build: compile + ad-hoc sign the local binary
 build:
@@ -50,6 +50,10 @@ install-skill:
 ## test: run the test suite
 test:
 	go test ./...
+
+## bench: recall and index benchmarks
+bench:
+	go test -run '^$$' -bench . -benchtime 20x ./internal/recall/
 
 ## vet: static checks
 vet:

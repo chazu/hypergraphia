@@ -10,7 +10,6 @@ import (
 
 	"github.com/chazu/hypergraphia/internal/entry"
 	"github.com/chazu/hypergraphia/internal/index"
-	"github.com/chazu/hypergraphia/internal/state"
 )
 
 // memoryJSON is the agent-facing shape of a memory.
@@ -334,58 +333,4 @@ func statusCmd() *cobra.Command {
 			})
 		},
 	}
-}
-
-func initCmd() *cobra.Command {
-	var remote string
-	c := &cobra.Command{
-		Use:   "init",
-		Short: "start using hypergraphia in this repository (only affects you)",
-		Long: `Create hypergraphia's local state in this repository's git directory.
-Nothing is committed and nothing changes for anyone who does not use
-hypergraphia.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			a, err := load(true)
-			if err != nil {
-				return err
-			}
-			d, err := state.Create(a.Repo)
-			if err != nil {
-				return err
-			}
-			a.Dir = d
-			st, err := d.Load()
-			if err != nil {
-				return err
-			}
-			ctx := cmd.Context()
-			if remote != "" || st.Remote == "" {
-				if remote == "" {
-					remote = "origin"
-				}
-				url := a.Git.Config(ctx, "remote."+remote+".url")
-				if url == "" {
-					remote = "" // local-only until a remote exists
-				}
-				st.Remote, st.RemoteURL = remote, url
-				if err := d.Save(st); err != nil {
-					return err
-				}
-			}
-			if err := a.CatchUp(ctx); err != nil {
-				return err
-			}
-			data := map[string]any{"state_dir": d.Path, "remote": st.Remote}
-			return emit(data, func(w io.Writer) {
-				fmt.Fprintf(w, "initialized hypergraphia in %s\n", d.Path)
-				if st.Remote == "" {
-					fmt.Fprintln(w, "no remote configured: memories stay local until one exists")
-				} else {
-					fmt.Fprintf(w, "remote: %s\n", st.Remote)
-				}
-			})
-		},
-	}
-	c.Flags().StringVar(&remote, "remote", "", "git remote that holds the shared memories (default origin)")
-	return c
 }

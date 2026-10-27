@@ -8,10 +8,8 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -25,6 +23,7 @@ import (
 	"github.com/chazu/hypergraphia/internal/replay"
 	"github.com/chazu/hypergraphia/internal/secrets"
 	"github.com/chazu/hypergraphia/internal/simhash"
+	"github.com/chazu/hypergraphia/internal/spawn"
 	"github.com/chazu/hypergraphia/internal/state"
 	"github.com/chazu/hypergraphia/internal/syncer"
 	"github.com/chazu/hypergraphia/internal/tokens"
@@ -265,40 +264,13 @@ func (a *App) Syncer(ctx context.Context) (*syncer.Syncer, error) {
 	return s, nil
 }
 
-// SpawnSync starts a detached background sync, unless disabled with
-// HYPERGRAPHIA_NO_BACKGROUND. It never waits and never fails the caller.
+// SpawnSync starts a detached background sync (unless disabled with
+// HYPERGRAPHIA_NO_BACKGROUND). It never waits and never fails the caller.
 func (a *App) SpawnSync() {
-	if a.Getenv("HYPERGRAPHIA_NO_BACKGROUND") != "" || a.Dir == nil {
+	if a.Dir == nil || a.Getenv(spawn.Disabled) != "" {
 		return
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return
-	}
-	logf, err := openSyncLog(a.Dir.File(state.SyncLog))
-	if err != nil {
-		return
-	}
-	defer logf.Close()
-	cmd := exec.Command(exe, "sync", "--quiet")
-	cmd.Dir = a.Repo.WorkTree
-	cmd.Stdin = nil
-	cmd.Stdout = logf
-	cmd.Stderr = logf
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err == nil {
-		_ = cmd.Process.Release()
-	}
-}
-
-// openSyncLog opens the background sync log for appending, truncating it
-// first once it passes 256 KiB.
-func openSyncLog(path string) (*os.File, error) {
-	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
-	if fi, err := os.Stat(path); err == nil && fi.Size() > 256<<10 {
-		flags |= os.O_TRUNC
-	}
-	return os.OpenFile(path, flags, 0o600)
+	spawn.Sync(a.Repo.WorkTree, a.Dir.File(state.SyncLog))
 }
 
 // SyncLock waits (bounded) for the sync lock.

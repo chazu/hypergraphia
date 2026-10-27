@@ -19,10 +19,18 @@ const (
 	MaxFiles = 200
 )
 
-// Files returns repo-relative paths of changed (tracked) files, plus the
-// current directory relative to the work tree when it is inside it. On
-// timeout or error it returns whatever it has (possibly nothing).
-func Files(ctx context.Context, g *gitx.Git, workTree, cwd string) []string {
+// Dir returns cwd relative to the work tree, or "" at the top or outside it.
+func Dir(workTree, cwd string) string {
+	rel, err := filepath.Rel(workTree, cwd)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+// Files returns repo-relative paths of changed (tracked) files. On timeout or
+// error it returns whatever it has (possibly nothing).
+func Files(ctx context.Context, g *gitx.Git, workTree string) []string {
 	ctx, cancel := context.WithTimeout(ctx, Deadline)
 	defer cancel()
 	var out []string
@@ -34,9 +42,6 @@ func Files(ctx context.Context, g *gitx.Git, workTree, cwd string) []string {
 		}
 		seen[p] = true
 		out = append(out, p)
-	}
-	if rel, err := filepath.Rel(workTree, cwd); err == nil && !strings.HasPrefix(rel, "..") {
-		add(rel)
 	}
 	raw, err := g.Run(ctx, nil, "--no-optional-locks", "status", "--porcelain", "-z",
 		"--untracked-files=no", "--ignore-submodules")

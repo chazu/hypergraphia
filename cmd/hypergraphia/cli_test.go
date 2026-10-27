@@ -191,3 +191,21 @@ func TestRecallCommand(t *testing.T) {
 		t.Errorf("anchor-only recall = %+v", anch)
 	}
 }
+
+func TestInitInstallsAndDeinitRemoves(t *testing.T) {
+	repo(t)
+	home, _ := os.UserHomeDir()
+	settings := filepath.Join(home, ".claude", "settings.json")
+	data[map[string]any](t, run(t, "init"))
+	b, err := os.ReadFile(settings)
+	if err != nil || !strings.Contains(string(b), "hook claude session-start") {
+		t.Fatalf("hooks not installed in %s: %v", settings, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "hypergraphia", "SKILL.md")); err != nil {
+		t.Error("skill not installed")
+	}
+	// deinit is human-only.
+	if r := run(t, "deinit", "--global"); r.exit != fail.CodeRequiresHuman {
+		t.Errorf("deinit as agent: %+v", r)
+	}
+}

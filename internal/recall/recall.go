@@ -38,6 +38,7 @@ var kindPrior = map[string]float64{"gotcha": 1.2, "convention": 1.1, "decision":
 type Options struct {
 	Prompt            string
 	Files             []string // repo-relative paths the user is working on
+	Dirs              []string // repo-relative directories the user is working in
 	Now               time.Time
 	Limit             int             // max results (0 = 10)
 	Budget            int             // token budget (0 = unlimited)
@@ -123,7 +124,7 @@ func Recall(db *index.DB, opt Options) (*Result, error) {
 	for _, id := range tri {
 		get(id).trigram = true
 	}
-	anchors, err := anchorScores(db, opt.Files)
+	anchors, err := anchorScores(db, opt.Files, opt.Dirs)
 	if err != nil {
 		return nil, err
 	}
@@ -253,9 +254,12 @@ func fuse(cs []*cand) {
 // anchorScores matches memory anchors against context files: exact file 1.0,
 // glob 0.8, anchor is the file's directory or a file in the same directory
 // 0.5, anchor is an ancestor directory 0.3.
-func anchorScores(db *index.DB, files []string) (map[string]float64, error) {
+//
+// A working directory D counts like a file directly inside D: anchors on D,
+// files in D, and globs matching files in D score 0.5; ancestors of D 0.3.
+func anchorScores(db *index.DB, files, dirs []string) (map[string]float64, error) {
 	out := map[string]float64{}
-	if len(files) == 0 {
+	if len(files) == 0 && len(dirs) == 0 {
 		return out, nil
 	}
 	if len(files) > maxFiles {
@@ -273,6 +277,20 @@ func anchorScores(db *index.DB, files []string) (map[string]float64, error) {
 		}
 		for d = path.Dir(d); d != "." && d != "/"; d = path.Dir(d) {
 			ancestor[d] = true
+		}
+	}
+	// A directory behaves like a (virtual) file inside it, at "same dir"
+	// strength: never an exact-file pin.
+	virtual := map[string]bool{}
+	for _, d := range dirs {
+		d = index.NormalizePath(d)
+		if d == "" || d == "." {
+			continue
+		}
+		parent[d] = true
+		virtual[d+"/\x00"] = true
+		for a := path.Dir(d); a != "." && a != "/"; a = path.Dir(a) {
+			ancestor[a] = true
 		}
 	}
 	set := func(id string, s float64) {
@@ -300,11 +318,11 @@ func anchorScores(db *index.DB, files []string) (map[string]float64, error) {
 			set(a.ID, 0.3)
 		}
 	}
-	var dirs []string
+	var parents []string
 	for d := range parent {
-		dirs = append(dirs, d)
+		parents = append(parents, d)
 	}
-	siblings, err := db.DirAnchors(dirs)
+	siblings, err := db.DirAnchors(parents)
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +337,14 @@ func anchorScores(db *index.DB, files []string) (map[string]float64, error) {
 	// globs whose base is "." or an ancestor of a context file are tried, and
 	// only against the files beneath that base.
 	under := map[string][]string{".": nil}
+	strength := map[string]float64{}
 	for f := range fileSet {
+		strength[f] = 0.8
+	}
+	for v := range virtual {
+		strength[v] = 0.5
+	}
+	for f := range strength {
 		under["."] = append(under["."], f)
 		for d := path.Dir(f); d != "." && d != "/"; d = path.Dir(d) {
 			under[d] = append(under[d], f)
@@ -332,8 +357,10 @@ func anchorScores(db *index.DB, files []string) (map[string]float64, error) {
 		base, _ := doublestar.SplitPattern(g.Path)
 		for _, f := range under[base] {
 			if ok, _ := doublestar.Match(g.Path, f); ok {
-				set(g.ID, 0.8)
-				break
+				set(g.ID, strength[f])
+				if strength[f] >= 0.8 {
+					break
+				}
 			}
 		}
 	}

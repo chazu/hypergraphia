@@ -15,9 +15,22 @@ import (
 	"testing"
 )
 
-var binary string
+var (
+	binary   string
+	realHome string
+)
 
 func TestMain(m *testing.M) {
+	// init writes Claude Code hooks and the skill under $HOME. Every test in
+	// this package (and every binary it spawns) must use a throwaway home.
+	realHome, _ = os.UserHomeDir()
+	fakeHome, err := os.MkdirTemp("", "hypergraphia-home")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", fakeHome)
+	defer os.RemoveAll(fakeHome)
+
 	dir, err := os.MkdirTemp("", "hypergraphia-bin")
 	if err != nil {
 		panic(err)
@@ -28,7 +41,14 @@ func TestMain(m *testing.M) {
 	}
 	code := m.Run()
 	os.RemoveAll(dir)
+	os.RemoveAll(fakeHome)
 	os.Exit(code)
+}
+
+func TestHomeIsIsolated(t *testing.T) {
+	if home, _ := os.UserHomeDir(); home == realHome || !strings.Contains(home, "hypergraphia-home") {
+		t.Fatalf("tests must not run against the real home directory (HOME=%s)", home)
+	}
 }
 
 func gitIn(t *testing.T, dir string, args ...string) string {
