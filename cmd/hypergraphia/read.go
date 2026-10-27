@@ -60,14 +60,22 @@ func who(m memoryJSON) string {
 }
 
 func showCmd() *cobra.Command {
-	return &cobra.Command{
+	var asOf string
+	c := &cobra.Command{
 		Use:   "show <id>",
-		Short: "show one memory",
+		Short: "show one memory (now, or --as-of a past moment)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			a, err := load(false)
 			if err != nil {
 				return err
+			}
+			if asOf != "" {
+				at, err := parseWhen(asOf, a.Now())
+				if err != nil {
+					return err
+				}
+				return showAsOf(cmd.Context(), a, args[0], at)
 			}
 			if err := a.CatchUp(cmd.Context()); err != nil {
 				return err
@@ -108,11 +116,14 @@ func showCmd() *cobra.Command {
 			})
 		},
 	}
+	c.Flags().StringVar(&asOf, "as-of", "", "show it as recorded at this time (RFC3339, YYYY-MM-DD, or e.g. 30d)")
+	return c
 }
 
 func listCmd() *cobra.Command {
 	var f index.Filter
 	var statuses []string
+	var asOf string
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "list memories, newest first",
@@ -120,6 +131,13 @@ func listCmd() *cobra.Command {
 			a, err := load(false)
 			if err != nil {
 				return err
+			}
+			if asOf != "" {
+				at, err := parseWhen(asOf, a.Now())
+				if err != nil {
+					return err
+				}
+				return listAsOf(cmd.Context(), a, at)
 			}
 			if err := a.CatchUp(cmd.Context()); err != nil {
 				return err
@@ -157,6 +175,7 @@ func listCmd() *cobra.Command {
 	c.Flags().StringVar(&f.Author, "author", "", "only this author email or agent")
 	c.Flags().StringSliceVar(&statuses, "status", nil, "active (default), superseded, retracted, or all")
 	c.Flags().IntVar(&f.Limit, "limit", 50, "maximum results (0 = all)")
+	c.Flags().StringVar(&asOf, "as-of", "", "list what was active at this time (RFC3339, YYYY-MM-DD, or e.g. 30d)")
 	return c
 }
 

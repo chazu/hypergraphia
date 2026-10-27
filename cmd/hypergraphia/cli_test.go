@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chazu/hypergraphia/internal/fail"
 )
@@ -207,5 +208,37 @@ func TestInitInstallsAndDeinitRemoves(t *testing.T) {
 	// deinit is human-only.
 	if r := run(t, "deinit", "--global"); r.exit != fail.CodeRequiresHuman {
 		t.Errorf("deinit as agent: %+v", r)
+	}
+}
+
+func TestLogAndAsOf(t *testing.T) {
+	repo(t)
+	run(t, "init", "--hooks", "none", "--no-skill")
+	m := data[rememberData](t, run(t, "remember", "-k", "decision", "We use NATS, not Kafka."))
+	n := data[rememberData](t, run(t, "remember", "--supersedes", m.Short, "We use NATS JetStream, not Kafka."))
+	data[map[string]string](t, run(t, "retract", n.Short, "--reason", "moved to Redis streams"))
+
+	lg := data[map[string]any](t, run(t, "log", m.Short))
+	events := lg["events"].([]any)
+	if len(events) != 2 { // remembered, superseded by n
+		t.Errorf("log of m = %v", events)
+	}
+	recent := data[map[string]any](t, run(t, "log"))
+	if len(recent["events"].([]any)) != 3 {
+		t.Errorf("recent log = %v", recent["events"])
+	}
+	cur := data[storeMemoryJSON](t, run(t, "show", n.Short, "--as-of", time.Now().Add(time.Minute).Format(time.RFC3339)))
+	if cur.Status != "retracted" || cur.RetractReason != "moved to Redis streams" {
+		t.Errorf("show --as-of now = %+v", cur.Memory)
+	}
+	before := run(t, "show", n.Short, "--as-of", "1d")
+	if before.exit != fail.CodeNotFound {
+		t.Errorf("show --as-of before creation: %+v", before)
+	}
+	if r := run(t, "history", "push"); r.exit != fail.CodeRequiresHuman {
+		t.Errorf("history push as agent: %+v", r)
+	}
+	if r := run(t, "show", n.Short, "--as-of", "yesterday-ish"); r.exit != fail.CodeUsage {
+		t.Errorf("bad time: %+v", r)
 	}
 }

@@ -204,12 +204,20 @@ func retractCmd() *cobra.Command {
 }
 
 func purgeCmd() *cobra.Command {
-	return &cobra.Command{
+	var prune bool
+	c := &cobra.Command{
 		Use:   "purge <id>",
 		Short: "remove a memory's content everywhere (humans only)",
-		Long: `Purge removes a memory's content locally and writes a tombstone so other
-clones drop it as they sync. Purge is cleanup, not containment: if the memory
-held a credential, rotate the credential.`,
+		Long: `Purge removes a memory's content: locally, from the shared log (rewritten
+immediately), from the shared history log, and — as they sync — from every
+other clone. A tombstone (the memory id only) stays in the logs forever so
+the content is never pushed back.
+
+Purge is cleanup, not containment: if the memory held a credential, rotate
+the credential. GitHub may keep serving unreferenced objects by SHA.
+
+--prune also runs git prune --expire=now in this repository, deleting all
+unreachable objects immediately (normally git keeps them ~2 weeks).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			a, err := load(false)
@@ -220,11 +228,10 @@ held a credential, rotate the credential.`,
 				return err
 			}
 			ctx := cmd.Context()
-			targets, err := resolveAll(ctx, a, args, true)
+			target, err := resolveAny(a, args[0])
 			if err != nil {
 				return err
 			}
-			target := targets[0]
 			// An unpushed memory leaves the outbox entirely.
 			if err := a.Outbox().Remove(map[string]bool{target: true}); err != nil {
 				return err
@@ -235,14 +242,41 @@ held a credential, rotate the credential.`,
 			if _, err := a.Write(ctx, e, nil, target); err != nil {
 				return err
 			}
-			a.SpawnSync()
-			data := map[string]string{"id": e.ID.String(), "target": target, "status": "queued"}
+			data := map[string]any{"id": e.ID.String(), "target": target}
+			s, err := a.Syncer(ctx)
+			if err != nil {
+				return err
+			}
+			if s.Transport != nil {
+				res, err := s.Run(ctx)
+				if err != nil {
+					return fmt.Errorf("purged locally, but the shared log was not updated: %w", err)
+				}
+				data["shared_log_rewritten"] = res.Compacted
+				scrubbed, err := a.ScrubHistory(ctx)
+				if err != nil {
+					return fmt.Errorf("purged locally and in the shared log, but not in the shared history: %w", err)
+				}
+				data["history_scrubbed"] = scrubbed
+			}
+			if prune {
+				if _, err := a.Git.Run(ctx, nil, "prune", "--expire=now"); err != nil {
+					return err
+				}
+				data["pruned"] = true
+			}
 			return emit(data, func(w io.Writer) {
-				fmt.Fprintf(w, "purged %s locally; the tombstone propagates on sync.\n", entry.Short(target))
+				fmt.Fprintf(w, "purged %s", entry.Short(target))
+				if v, _ := data["shared_log_rewritten"].(bool); v {
+					fmt.Fprint(w, " (shared log rewritten)")
+				}
+				fmt.Fprintln(w)
 				fmt.Fprintln(w, "If it held a credential, rotate the credential: purge is cleanup, not containment.")
 			})
 		},
 	}
+	c.Flags().BoolVar(&prune, "prune", false, "also delete unreachable git objects now (git prune --expire=now)")
+	return c
 }
 
 func synonymCmd() *cobra.Command {

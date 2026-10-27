@@ -3,6 +3,8 @@ module github.com/chazu/hypergraphia
 go 1.26.6
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.4
+	github.com/chazu/litelog v0.0.0-20261027145212-bfdadec9dae6
 	github.com/kljensen/snowball v0.10.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/rs/zerolog v1.33.0
@@ -22,7 +24,6 @@ require (
 	github.com/STARRY-S/zip v0.2.1 // indirect
 	github.com/andybalholm/brotli v1.1.2-0.20250424173009-453214e765f3 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect

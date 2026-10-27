@@ -236,10 +236,21 @@ func (a *App) replayLocked(ctx context.Context) error {
 		return err
 	}
 	need, err := replay.CatchUp(a.Dir, es)
-	if err != nil || !need {
+	if err != nil {
 		return err
 	}
-	return replay.Rebuild(a.Dir, es)
+	if need {
+		if err := replay.Rebuild(a.Dir, es); err != nil {
+			return err
+		}
+	}
+	// Keep the history store warm (background syncs pay for rebuilds, so
+	// show/list --as-of stay fast).
+	s, err := a.storeCatchUpLocked(ctx)
+	if err != nil {
+		return err
+	}
+	return s.Close()
 }
 
 // Syncer returns a syncer for this repository.

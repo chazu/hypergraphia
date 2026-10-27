@@ -121,3 +121,14 @@ func ExpireReflogs(ctx context.Context, g *gitx.Git) error {
 	}
 	return nil
 }
+
+// HistoryRef is the remote ref holding history restored by `history push`.
+const HistoryRef = "refs/notes/hypergraphia-history"
+
+// NewHistory returns the transport for the restored-history log.
+func NewHistory(g *gitx.Git, remote string) *Transport {
+	t := New(g, remote)
+	t.Ref = HistoryRef
+	t.Local = "refs/hypergraphia/remotes/" + remote + "/history"
+	return t
+}

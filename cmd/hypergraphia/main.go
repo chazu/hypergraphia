@@ -60,6 +60,8 @@ func root() *cobra.Command {
 		recallCmd(),
 		deinitCmd(),
 		hookCmd(),
+		logCmd(),
+		historyCmd(),
 	)
 	return c
 }
