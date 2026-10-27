@@ -8,8 +8,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -18,12 +20,15 @@ import (
 	"github.com/chazu/hypergraphia/internal/fail"
 	"github.com/chazu/hypergraphia/internal/gitx"
 	"github.com/chazu/hypergraphia/internal/index"
+	"github.com/chazu/hypergraphia/internal/notes"
 	"github.com/chazu/hypergraphia/internal/outbox"
 	"github.com/chazu/hypergraphia/internal/replay"
 	"github.com/chazu/hypergraphia/internal/secrets"
 	"github.com/chazu/hypergraphia/internal/simhash"
 	"github.com/chazu/hypergraphia/internal/state"
+	"github.com/chazu/hypergraphia/internal/syncer"
 	"github.com/chazu/hypergraphia/internal/tokens"
+	"github.com/chazu/hypergraphia/internal/transport"
 )
 
 // MinIDPrefix is the shortest id prefix accepted (the first 10 ULID
@@ -129,13 +134,48 @@ func (a *App) Entries() ([]*entry.Entry, error) {
 	return replay.Merge(live, pending), nil
 }
 
-// liveEntries is replaced by the notes transport once sync exists.
-var liveEntries = func(a *App) ([]*entry.Entry, error) { return nil, nil }
+// Transport returns the live-log transport, or nil without a remote.
+func (a *App) Transport() (transport.Transport, error) {
+	st, err := a.Dir.Load()
+	if err != nil {
+		return nil, err
+	}
+	if st.Remote == "" {
+		return nil, nil
+	}
+	return notes.New(a.Git, st.Remote), nil
+}
 
-func (a *App) liveEntries() ([]*entry.Entry, error) { return liveEntries(a) }
-
-// SetLiveSource installs the function that reads the fetched live log.
-func SetLiveSource(f func(*App) ([]*entry.Entry, error)) { liveEntries = f }
+// liveEntries reads the last fetched live log (no network), minus entries
+// quarantined by the incoming secret scan.
+func (a *App) liveEntries() ([]*entry.Entry, error) {
+	t, err := a.Transport()
+	if err != nil || t == nil {
+		return nil, err
+	}
+	log, err := t.ReadLocal(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	st, err := a.Dir.Load()
+	if err != nil {
+		return nil, err
+	}
+	if len(st.Quarantine) == 0 {
+		return log.Entries, nil
+	}
+	q := map[string]bool{}
+	for _, id := range st.Quarantine {
+		q[id] = true
+	}
+	var out []*entry.Entry
+	for _, e := range log.Entries {
+		if !q[e.ID.String()] {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
 
 // CatchUp brings the index up to date, rebuilding under the sync lock when a
 // purge removed existing content.
@@ -158,11 +198,107 @@ func (a *App) Rebuild(ctx context.Context) error {
 		return err
 	}
 	defer l.Unlock()
+	return a.rebuildLocked()
+}
+
+func (a *App) rebuildLocked() error {
 	es, err := a.Entries()
 	if err != nil {
 		return err
 	}
 	return replay.Rebuild(a.Dir, es)
+}
+
+// replayLocked catches up (and rebuilds if needed) while the caller holds the
+// sync lock.
+func (a *App) replayLocked(ctx context.Context) error {
+	es, err := a.Entries()
+	if err != nil {
+		return err
+	}
+	need, err := replay.CatchUp(a.Dir, es)
+	if err != nil || !need {
+		return err
+	}
+	return replay.Rebuild(a.Dir, es)
+}
+
+// Syncer returns a syncer for this repository.
+func (a *App) Syncer(ctx context.Context) (*syncer.Syncer, error) {
+	t, err := a.Transport()
+	if err != nil {
+		return nil, err
+	}
+	s := &syncer.Syncer{
+		Dir: a.Dir, Outbox: a.Outbox(), Now: a.Now,
+		Scan: func(e *entry.Entry, allow map[string]bool) ([]secrets.Finding, error) {
+			f, err := a.Scanner(ctx).Scan(EntryFields(e)...)
+			if err != nil {
+				return nil, err
+			}
+			return secrets.Allowed(f, allow), nil
+		},
+		Known: func() (map[string]bool, error) {
+			db, err := a.Index()
+			if err != nil {
+				return nil, err
+			}
+			defer db.Close()
+			known, err := db.Applied()
+			if err != nil {
+				return nil, err
+			}
+			mine, _, err := a.Outbox().Entries()
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range mine {
+				known[e.ID.String()] = true
+			}
+			return known, nil
+		},
+		Replay: a.replayLocked,
+	}
+	if t != nil {
+		s.Transport = t
+	}
+	return s, nil
+}
+
+// SpawnSync starts a detached background sync, unless disabled with
+// HYPERGRAPHIA_NO_BACKGROUND. It never waits and never fails the caller.
+func (a *App) SpawnSync() {
+	if a.Getenv("HYPERGRAPHIA_NO_BACKGROUND") != "" || a.Dir == nil {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	logf, err := openSyncLog(a.Dir.File(state.SyncLog))
+	if err != nil {
+		return
+	}
+	defer logf.Close()
+	cmd := exec.Command(exe, "sync", "--quiet")
+	cmd.Dir = a.Repo.WorkTree
+	cmd.Stdin = nil
+	cmd.Stdout = logf
+	cmd.Stderr = logf
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err == nil {
+		_ = cmd.Process.Release()
+	}
+}
+
+// openSyncLog opens the background sync log for appending, truncating it
+// first once it passes 256 KiB.
+func openSyncLog(path string) (*os.File, error) {
+	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if fi, err := os.Stat(path); err == nil && fi.Size() > 256<<10 {
+		flags |= os.O_TRUNC
+	}
+	return os.OpenFile(path, flags, 0o600)
 }
 
 // SyncLock waits (bounded) for the sync lock.

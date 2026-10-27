@@ -97,6 +97,7 @@ Memories are immutable: to correct one, remember the new truth with
 			if err != nil {
 				return err
 			}
+			a.SpawnSync()
 			data := rememberData{
 				ID: e.ID.String(), Short: entry.Short(e.ID.String()), Status: "queued",
 				Supersedes: nonNil(targets), NearDuplicates: []nearDup{},
@@ -192,6 +193,7 @@ func retractCmd() *cobra.Command {
 			if _, err := a.Write(ctx, e, nil, targets[0]); err != nil {
 				return err
 			}
+			a.SpawnSync()
 			data := map[string]string{"id": e.ID.String(), "target": targets[0], "status": "queued"}
 			return emit(data, func(w io.Writer) { fmt.Fprintf(w, "retracted %s\n", entry.Short(targets[0])) })
 		},
@@ -233,6 +235,7 @@ held a credential, rotate the credential.`,
 			if _, err := a.Write(ctx, e, nil, target); err != nil {
 				return err
 			}
+			a.SpawnSync()
 			data := map[string]string{"id": e.ID.String(), "target": target, "status": "queued"}
 			return emit(data, func(w io.Writer) {
 				fmt.Fprintf(w, "purged %s locally; the tombstone propagates on sync.\n", entry.Short(target))
@@ -257,6 +260,7 @@ func synonymCmd() *cobra.Command {
 			if _, err := a.Write(cmd.Context(), e, nil); err != nil {
 				return err
 			}
+			a.SpawnSync()
 			data := map[string]any{"id": e.ID.String(), "terms": e.Terms}
 			return emit(data, func(w io.Writer) { fmt.Fprintf(w, "synonyms: %s\n", strings.Join(e.Terms, ", ")) })
 		},

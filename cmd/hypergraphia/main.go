@@ -56,6 +56,7 @@ func root() *cobra.Command {
 		outboxCmd(),
 		rebuildCmd(),
 		statusCmd(),
+		syncCmd(),
 	)
 	return c
 }

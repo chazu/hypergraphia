@@ -37,6 +37,13 @@ type State struct {
 	Invalid    int       `json:"invalid_lines,omitempty"`     // incoming lines dropped by validation
 	Quarantine []string  `json:"quarantined,omitempty"`       // incoming entry ids held back by the secret scan
 	NewerSeen  bool      `json:"newer_format_seen,omitempty"` // a newer client wrote here; never compact
+	HeldBack   []Held    `json:"held_back,omitempty"`         // own outbox entries the push-time scan held back
+}
+
+// Held is an outbox entry withheld from push by the secret scan.
+type Held struct {
+	ID    string   `json:"id"`
+	Rules []string `json:"rules"`
 }
 
 // Dir is an opened state directory.

@@ -98,6 +98,11 @@ func (e *Error) Unwrap() error { return e.Err }
 
 // Run executes git with args and returns stdout.
 func (g *Git) Run(ctx context.Context, stdin io.Reader, args ...string) ([]byte, error) {
+	return g.RunEnv(ctx, nil, stdin, args...)
+}
+
+// RunEnv is Run with extra environment variables.
+func (g *Git) RunEnv(ctx context.Context, extraEnv []string, stdin io.Reader, args ...string) ([]byte, error) {
 	full := []string{
 		"-C", g.WorkTree,
 		"-c", "core.hooksPath=" + g.NoHooks,
@@ -111,7 +116,7 @@ func (g *Git) Run(ctx context.Context, stdin io.Reader, args ...string) ([]byte,
 	}
 	full = append(full, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
-	cmd.Env = g.env
+	cmd.Env = append(append([]string(nil), g.env...), extraEnv...)
 	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
